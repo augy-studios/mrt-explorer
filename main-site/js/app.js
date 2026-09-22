@@ -3,7 +3,7 @@ import { hydrateIcons, openModal, closeModal, closeTopModal, escapeHtml } from "
 import { initUpdateBar } from "./update-bar.js";
 import { LINES, lineStyle, codeBadge, codeBadges } from "./lines.js";
 import { loadData, searchStations } from "./stations.js";
-import { createMap, setVisibleLines, selectStation, zoomBy, fitNetwork } from "./map.js";
+import { createMap, setVisibleLines, selectStation, zoomBy, resetZoom } from "./map.js";
 
 const HIDDEN_LINES_KEY = "mrtexplorer.hiddenLines";
 
@@ -313,7 +313,7 @@ function wireMapControls() {
   wireFullscreen();
   document.getElementById("zoomIn").addEventListener("click", () => zoomBy(1));
   document.getElementById("zoomOut").addEventListener("click", () => zoomBy(-1));
-  document.getElementById("fitBtn").addEventListener("click", fitNetwork);
+  document.getElementById("resetZoomBtn").addEventListener("click", resetZoom);
   document.getElementById("detailClose").addEventListener("click", hideDetail);
 
   document.addEventListener("keydown", (e) => {

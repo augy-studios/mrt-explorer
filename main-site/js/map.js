@@ -198,6 +198,7 @@ export function zoomBy(delta) {
   map.setZoom(map.getZoom() + delta, { animate: !reduceMotion() });
 }
 
-export function fitNetwork() {
+// Back to the opening view: the whole network in frame.
+export function resetZoom() {
   map.fitBounds(networkBounds, { ...fitOptions(), animate: !reduceMotion() });
 }
