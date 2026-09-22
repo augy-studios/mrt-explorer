@@ -1,4 +1,4 @@
-const CACHE = "mrtexplorer-offline-v1";
+const CACHE = "mrtexplorer-v1";
 
 const ASSETS = [
   "/",
