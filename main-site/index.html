@@ -118,7 +118,7 @@
                 </div>
                 <div id="linesPanel" class="dropdown glass hidden">
                     <div id="lineList" class="line-list" role="group" aria-label="Show or hide lines"></div>
-                    <button id="showAllLines" class="text-btn" type="button">Show all lines</button>
+                    <button id="allLinesBtn" class="text-btn" type="button">Hide all lines</button>
                 </div>
             </section>
         </div>
@@ -130,8 +130,11 @@
             <button id="zoomOut" class="icon-btn" type="button" aria-label="Zoom out">
                 <span data-icon="minus"></span>
             </button>
-            <button id="fitBtn" class="icon-btn" type="button" aria-label="Show the whole network">
-                <span data-icon="fit"></span>
+            <button id="fitBtn" class="icon-btn" type="button" aria-label="Show the whole network" title="Show the whole network">
+                <span data-icon="recenter"></span>
+            </button>
+            <button id="fullscreenBtn" class="icon-btn" type="button" aria-label="Full screen" aria-pressed="false" title="Full screen" hidden>
+                <span data-icon="fullscreen"></span>
             </button>
         </div>
 

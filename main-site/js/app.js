@@ -125,8 +125,10 @@ function buildLineToggles() {
     applyLineVisibility();
   });
 
-  document.getElementById("showAllLines").addEventListener("click", () => {
-    visibleLines = new Set(LINES.map((l) => l.code));
+  // Hides everything when everything is showing, otherwise shows everything.
+  document.getElementById("allLinesBtn").addEventListener("click", () => {
+    const allShown = visibleLines.size === LINES.length;
+    visibleLines = allShown ? new Set() : new Set(LINES.map((l) => l.code));
     applyLineVisibility();
   });
 
@@ -144,6 +146,8 @@ function applyLineVisibility() {
     el.setAttribute("aria-pressed", String(visibleLines.has(el.dataset.line)));
   });
   document.getElementById("linesCount").textContent = `${visibleLines.size} of ${LINES.length}`;
+  document.getElementById("allLinesBtn").textContent =
+    visibleLines.size === LINES.length ? "Hide all lines" : "Show all lines";
   setVisibleLines(visibleLines);
   saveHiddenLines();
 }
@@ -280,7 +284,33 @@ function hideDetail() {
 
 /* Map controls and keys. */
 
+// Hidden where the browser has no Fullscreen API, such as Safari on iPhone.
+function wireFullscreen() {
+  const btn = document.getElementById("fullscreenBtn");
+  if (!document.fullscreenEnabled) return;
+  btn.hidden = false;
+
+  const sync = () => {
+    const on = !!document.fullscreenElement;
+    btn.setAttribute("aria-pressed", String(on));
+    btn.setAttribute("aria-label", on ? "Exit full screen" : "Full screen");
+    btn.querySelector("[data-icon]").dataset.icon = on ? "fullscreenExit" : "fullscreen";
+    hydrateIcons(btn);
+  };
+
+  btn.addEventListener("click", () => {
+    const request = document.fullscreenElement
+      ? document.exitFullscreen()
+      : document.documentElement.requestFullscreen({ navigationUI: "hide" });
+    request.catch((cause) => console.warn("full screen refused:", cause));
+  });
+  // Also fires when full screen is left with Esc or the system back gesture.
+  document.addEventListener("fullscreenchange", sync);
+  sync();
+}
+
 function wireMapControls() {
+  wireFullscreen();
   document.getElementById("zoomIn").addEventListener("click", () => zoomBy(1));
   document.getElementById("zoomOut").addEventListener("click", () => zoomBy(-1));
   document.getElementById("fitBtn").addEventListener("click", fitNetwork);

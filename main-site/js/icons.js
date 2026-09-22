@@ -20,7 +20,9 @@ export const icons = {
   chevronDown: svg(`<path d="M6 9l6 6 6-6"/>`),
   plus: svg(`<path d="M12 5v14M5 12h14"/>`),
   minus: svg(`<path d="M5 12h14"/>`),
-  fit: svg(`<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>`),
+  recenter: svg(`<circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/>`),
+  fullscreen: svg(`<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>`),
+  fullscreenExit: svg(`<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>`),
   train: svg(
     `<rect x="5" y="3.5" width="14" height="13" rx="3"/><path d="M5 11h14M9 20.5l-1.5-4M15 20.5l1.5-4"/><circle cx="9" cy="14" r=".4" fill="currentColor"/><circle cx="15" cy="14" r=".4" fill="currentColor"/>`
   ),

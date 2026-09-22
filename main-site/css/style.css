@@ -434,6 +434,8 @@ body {
   transform: translateY(-50%);
 }
 .map-controls .icon-btn { box-shadow: var(--shadow); }
+/* .icon-btn's display would otherwise beat the hidden attribute. */
+.map-controls .icon-btn[hidden] { display: none; }
 
 /* Station detail card. */
 .detail {
