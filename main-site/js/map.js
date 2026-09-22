@@ -188,8 +188,11 @@ export function selectStation(station, { fly = true } = {}) {
 
   if (fly) {
     const zoom = Math.max(map.getZoom(), NAMES_FROM_ZOOM);
-    // Centre a little below the station, keeping it clear of the detail card.
-    const centre = map.unproject(map.project(toLatLng(station.lngLat), zoom).add([0, 60]), zoom);
+    // Centre the dot and its label together, not the dot alone, so the label
+    // does not run off a phone screen or under the zoom controls. And a
+    // little below, keeping the station clear of the detail card.
+    const tagWidth = entry.el.querySelector(".stn-tag")?.offsetWidth ?? 0;
+    const centre = map.unproject(map.project(toLatLng(station.lngLat), zoom).add([tagWidth / 2, 60]), zoom);
     map.setView(centre, zoom, { animate: !reduceMotion() });
   }
 }

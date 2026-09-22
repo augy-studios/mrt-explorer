@@ -28,7 +28,7 @@
 //    fails the whole install on one bad path, and without 'reload' a bumped
 //    worker can fill its new cache from the HTTP cache's old files.
 
-const VERSION = "mrtexplorer-v5";
+const VERSION = "mrtexplorer-v6";
 
 const SHELL = `mrtexplorer-shell-${VERSION}`;
 
