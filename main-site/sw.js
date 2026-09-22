@@ -9,6 +9,7 @@
 //   navigation              the shell this worker owns, network if absent
 //   same origin assets      cache first
 //   Google Fonts            cache first, in a cache that outlives versions
+//   OSM map tiles           cache first for 30 days, capped, blank offline
 //   other cross origin      not intercepted (analytics, ads)
 //   anything but GET        not intercepted
 //
@@ -27,15 +28,33 @@
 //    fails the whole install on one bad path, and without 'reload' a bumped
 //    worker can fill its new cache from the HTTP cache's old files.
 
-const VERSION = "mrtexplorer-v2";
+const VERSION = "mrtexplorer-v3";
 
 const SHELL = `mrtexplorer-shell-${VERSION}`;
 
-// Not versioned: a font file never changes under the same URL.
+// Not versioned: a font file or a map tile does not change with the app.
 const FONTS = "mrtexplorer-fonts-v1";
+const TILES = "mrtexplorer-tiles-v1";
 
 // Everything else is deleted on activate.
-const KEEP = new Set([SHELL, FONTS]);
+const KEEP = new Set([SHELL, FONTS, TILES]);
+
+// Only tiles somebody has looked at are cached: the OSM tile policy forbids
+// prefetching. Oldest are dropped past the cap, roughly 20 MB.
+const MAX_TILES = 1500;
+const TILE_HOST = "tile.openstreetmap.org";
+
+// OSM answers `no-cache`. Serving from the cache is fewer requests than
+// revalidating every tile, which is what the policy cares about; after this
+// long a tile is fetched again when there is a connection.
+const TILE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+// A 1x1 transparent PNG for a tile that is neither cached nor reachable, so
+// an offline map shows empty ground rather than broken images.
+const BLANK_TILE = Uint8Array.from(
+  atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="),
+  (c) => c.charCodeAt(0)
+);
 
 const FONT_CSS = "https://fonts.googleapis.com/css2?family=Jua&display=swap";
 
@@ -58,12 +77,8 @@ const PRECACHE = [
   "/js/stations.js",
   "/js/map.js",
 
-  // All three: the map module imports the shared chunk and starts the
-  // worker file by URL. Missing any one means no map offline.
-  "/vendor/maplibre-gl/maplibre-gl.mjs",
-  "/vendor/maplibre-gl/maplibre-gl-shared.mjs",
-  "/vendor/maplibre-gl/maplibre-gl-worker.mjs",
-  "/vendor/maplibre-gl/maplibre-gl.css",
+  "/vendor/leaflet/leaflet.js",
+  "/vendor/leaflet/leaflet.css",
 
   "/data/stations.geojson",
   "/data/lines.geojson",
@@ -166,6 +181,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  if (url.hostname === TILE_HOST) {
+    event.respondWith(tile(request));
+    return;
+  }
+
   // Analytics and ads go straight to the network, and simply fail offline.
   if (url.origin !== self.location.origin) return;
 
@@ -216,6 +236,46 @@ async function font(request) {
     return response;
   } catch {
     return new Response("", { status: 503 });
+  }
+}
+
+async function tile(request) {
+  const cache = await caches.open(TILES);
+
+  const cached = await cache.match(request.url);
+  const storedAt = Number(cached?.headers.get("x-stored-at"));
+  if (cached && Date.now() - storedAt < TILE_MAX_AGE_MS) return cached;
+
+  try {
+    const response = await fetch(request);
+    // CORS responses only: Leaflet asks with crossOrigin, and an opaque
+    // response would cost megabytes of quota each.
+    if (response.ok && response.type === "cors") {
+      // Stamped here because a CORS response does not expose its Date header.
+      const headers = new Headers(response.headers);
+      headers.set("x-stored-at", String(Date.now()));
+      const body = await response.clone().blob();
+      await cache.put(request.url, new Response(body, { status: 200, headers }));
+      trimTiles(cache);
+    }
+    return response;
+  } catch {
+    return cached ?? new Response(BLANK_TILE, { headers: { "Content-Type": "image/png" } });
+  }
+}
+
+let trimming = false;
+
+// Cache keys come back in insertion order, so the oldest go first.
+async function trimTiles(cache) {
+  if (trimming) return;
+  trimming = true;
+  try {
+    const keys = await cache.keys();
+    const excess = keys.length - MAX_TILES;
+    for (let i = 0; i < excess; i++) await cache.delete(keys[i]);
+  } finally {
+    trimming = false;
   }
 }
 

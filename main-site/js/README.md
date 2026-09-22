@@ -12,4 +12,4 @@ ES modules, loaded from `app.js`. Every file here must also be listed in
 | `update-bar.js` | Service worker registration and the update bar. |
 | `lines.js` | The one lookup of line codes, names and colours. |
 | `stations.js` | Loads the data and runs the search. |
-| `map.js` | MapLibre map, line layers and station markers. |
+| `map.js` | Leaflet map, OSM tiles, line layers and station markers. |

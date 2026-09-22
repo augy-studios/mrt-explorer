@@ -1,140 +1,156 @@
-// The network map. MapLibre with no basemap: lines and stations on the
-// page's own flat background, so nothing is fetched beyond the app itself
-// and the map works offline exactly as it does online.
+// The network map. Leaflet over the standard OpenStreetMap tiles, with the
+// lines and stations drawn from the vendored GeoJSON. The service worker
+// caches tiles as they are viewed; OSM's tile policy forbids prefetching, so
+// offline, an area not yet viewed is blank, but the network always draws.
 
-import * as maplibregl from "/vendor/maplibre-gl/maplibre-gl.mjs";
 import { LINES, codeBadges } from "./lines.js";
 import { escapeHtml } from "./ui.js";
 
-// Zoom levels at which markers grow their code badges, then their names.
+// Leaflet 1.9 is a classic script; index.html loads it before this module.
+const L = window.L;
+
+// Below this, station dots shrink so the whole network stays readable on a
+// phone. Above the next two, markers grow code badges, then names.
+const SMALL_DOTS_BELOW_ZOOM = 10.75;
 const CODES_FROM_ZOOM = 12.5;
 const NAMES_FROM_ZOOM = 14;
+
+const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 
 let map = null;
 let networkBounds = null;
 const markers = new Map();
+const lineLayers = new Map();
 let selectedKey = null;
+
+const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function cssToken(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-function boundsOf(stations) {
-  const b = new maplibregl.LngLatBounds();
-  stations.forEach((s) => b.extend(s.lngLat));
-  return b;
-}
-
 // Room for the floating panels, so a fitted network is not hidden under them.
-function viewPadding() {
+function fitOptions() {
   const small = window.innerWidth <= 480;
-  return { top: small ? 150 : 170, bottom: 40, left: 30, right: small ? 60 : 80 };
+  return {
+    paddingTopLeft: [20, small ? 150 : 170],
+    paddingBottomRight: [small ? 60 : 80, 30],
+  };
 }
 
-function markerElement(station) {
-  const el = document.createElement("div");
-  el.className = "stn";
-  if (station.codes.length > 1) el.classList.add("stn-interchange");
-  el.dataset.key = station.key;
+// Line widths by zoom: 2.5px at 10, 4px at 13, 7px at 16.
+function lineWidth(zoom) {
+  if (zoom <= 10) return 2.5;
+  if (zoom <= 13) return 2.5 + ((zoom - 10) / 3) * 1.5;
+  return Math.min(7, 4 + (zoom - 13));
+}
 
+function styleLines() {
+  const w = lineWidth(map.getZoom());
+  const ink = cssToken("--ink");
+  for (const { casing, fill } of lineLayers.values()) {
+    // The casing is what makes every official colour readable on both the
+    // light and dark map: at 60% ink its edge clears 4.4:1 in all 14 theme
+    // combinations, where the Circle Line orange alone manages 1.8:1 on light
+    // and the Downtown Line blue 2.4:1 on dark.
+    casing.setStyle({ color: ink, opacity: 0.6, weight: w + 2 });
+    fill.setStyle({ weight: w });
+  }
+}
+
+function markerHtml(station) {
   // Not in the tab order: 184 stops would bury everything else. Search is
   // the keyboard route to every station.
-  el.innerHTML = `
+  return `
     <button class="stn-dot" type="button" tabindex="-1"
       aria-label="${escapeHtml(station.name)}, ${escapeHtml(station.codes.map((c) => c.code).join(" "))}"></button>
     <span class="stn-tag" aria-hidden="true">
       <span class="stn-codes">${codeBadges(station.codes)}</span>
       <span class="stn-name">${escapeHtml(station.name)}</span>
     </span>`;
-  return el;
 }
 
 function updateTier() {
   const z = map.getZoom();
-  const tier = z >= NAMES_FROM_ZOOM ? "2" : z >= CODES_FROM_ZOOM ? "1" : "0";
-  map.getContainer().dataset.tier = tier;
+  const el = map.getContainer();
+  el.dataset.tier = z >= NAMES_FROM_ZOOM ? "2" : z >= CODES_FROM_ZOOM ? "1" : "0";
+  el.toggleAttribute("data-small-dots", z < SMALL_DOTS_BELOW_ZOOM);
 }
 
-function applyThemeToMap() {
-  if (!map?.getLayer("line-casing")) return;
-  map.setPaintProperty("line-casing", "line-color", cssToken("--ink"));
+function toLatLng(lngLat) {
+  return [lngLat[1], lngLat[0]];
 }
 
 export function createMap({ container, stations, lines, onSelect, onClear }) {
-  networkBounds = boundsOf(stations);
+  networkBounds = L.latLngBounds(stations.map((s) => toLatLng(s.lngLat)));
 
-  map = new maplibregl.Map({
-    container,
-    // No sources beyond our own GeoJSON, no glyphs, no sprites: nothing that
-    // needs a server. No background layer either, so the canvas is
-    // transparent and the themed page colour shows through.
-    style: { version: 8, sources: {}, layers: [] },
-    bounds: networkBounds,
-    fitBoundsOptions: { padding: viewPadding() },
-    // Generous on purpose. The whole viewport must fit inside these, so a
-    // tight box forces a tall phone screen to zoom in and crop the network.
-    maxBounds: [
-      [103.1, 0.5],
-      [104.5, 2.2],
-    ],
-    minZoom: 9,
-    maxZoom: 17.5,
+  map = L.map(container, {
+    zoomControl: false,
     attributionControl: false,
-    renderWorldCopies: false,
-    dragRotate: false,
-    pitchWithRotate: false,
-    touchPitch: false,
+    minZoom: 9,
+    maxZoom: 18,
+    zoomSnap: 0.25,
+    wheelPxPerZoomLevel: 90,
+    maxBounds: L.latLngBounds([0.9, 103.2], [1.8, 104.4]),
+    maxBoundsViscosity: 1,
   });
-  map.touchZoomRotate.disableRotation();
+  map.fitBounds(networkBounds, fitOptions());
 
-  map.on("load", () => {
-    map.addSource("lines", { type: "geojson", data: lines });
+  // Dark mode is these same tiles inverted in CSS; OSM has one style.
+  L.tileLayer(TILE_URL, {
+    maxZoom: 19,
+    // CORS rather than opaque, so the service worker can cache tiles at
+    // their real size. An opaque response costs megabytes of quota each.
+    crossOrigin: true,
+  }).addTo(map);
 
-    const width = ["interpolate", ["linear"], ["zoom"], 10, 2.5, 13, 4, 16, 7];
-    const casingWidth = ["interpolate", ["linear"], ["zoom"], 10, 4.5, 13, 6, 16, 9];
+  // Two panes, so every casing sits under every coloured line, even after a
+  // line is hidden and shown again.
+  map.createPane("casing").style.zIndex = 410;
+  map.createPane("lines").style.zIndex = 420;
 
-    // The casing is what makes every official colour readable on both the
-    // light and dark page: at 60% ink its edge clears 4.4:1 in all 14 theme
-    // combinations, where the Circle Line orange alone manages 1.8:1 on light
-    // and the Downtown Line blue 2.4:1 on dark.
-    map.addLayer({
-      id: "line-casing",
-      type: "line",
-      source: "lines",
-      layout: { "line-join": "round", "line-cap": "round" },
-      paint: { "line-color": cssToken("--ink"), "line-opacity": 0.6, "line-width": casingWidth },
+  const colours = new Map(LINES.map((l) => [l.code, l.color]));
+  for (const feature of lines.features) {
+    const code = feature.properties.line;
+    const casing = L.geoJSON(feature, { pane: "casing", interactive: false, style: { lineCap: "round", lineJoin: "round" } });
+    const fill = L.geoJSON(feature, {
+      pane: "lines",
+      interactive: false,
+      style: { color: colours.get(code) ?? cssToken("--muted"), opacity: 1, lineCap: "round", lineJoin: "round" },
     });
-
-    map.addLayer({
-      id: "line-fill",
-      type: "line",
-      source: "lines",
-      layout: { "line-join": "round", "line-cap": "round" },
-      paint: {
-        "line-color": ["match", ["get", "line"], ...LINES.flatMap((l) => [l.code, l.color]), cssToken("--muted")],
-        "line-width": width,
-      },
-    });
-  });
+    // A line code can span several features: Sengkang and Punggol have two
+    // loops each. Feature groups pass setStyle through to every part.
+    const entry = lineLayers.get(code) ?? { casing: L.featureGroup().addTo(map), fill: L.featureGroup().addTo(map) };
+    entry.casing.addLayer(casing);
+    entry.fill.addLayer(fill);
+    lineLayers.set(code, entry);
+  }
+  styleLines();
 
   for (const station of stations) {
-    const el = markerElement(station);
-    el.querySelector(".stn-dot").addEventListener("click", (e) => {
-      e.stopPropagation();
-      onSelect(station, { fromMap: true });
-    });
-    const marker = new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(station.lngLat).addTo(map);
-    markers.set(station.key, { marker, el, station });
+    const interchange = station.codes.length > 1;
+    const size = interchange ? 16 : 12;
+    const marker = L.marker(toLatLng(station.lngLat), {
+      icon: L.divIcon({
+        className: interchange ? "stn stn-interchange" : "stn",
+        html: markerHtml(station),
+        iconSize: [size, size],
+      }),
+      keyboard: false,
+    }).addTo(map);
+    marker.on("click", () => onSelect(station, { fromMap: true }));
+    markers.set(station.key, { marker, el: marker.getElement(), station });
   }
 
-  // Marker clicks stop propagation, so this is a tap on empty map.
+  // Marker clicks do not bubble to the map, so this is a tap on empty map.
   map.on("click", () => onClear?.());
-
   map.on("zoom", updateTier);
+  map.on("zoomend", styleLines);
   updateTier();
 
-  // Mode or swatch changed, by the person or by the clock at 09:00 or 18:00.
-  new MutationObserver(applyThemeToMap).observe(document.documentElement, {
+  // Mode changed, by the person or by the clock at 09:00 or 18:00. The tiles
+  // follow through CSS; the casing colour is set here.
+  new MutationObserver(styleLines).observe(document.documentElement, {
     attributes: true,
     attributeFilter: ["data-mode", "data-color-theme"],
   });
@@ -143,14 +159,13 @@ export function createMap({ container, stations, lines, onSelect, onClear }) {
 }
 
 export function setVisibleLines(visible) {
-  const codes = [...visible];
-  const apply = () => {
-    const filter = ["in", ["get", "line"], ["literal", codes]];
-    map.setFilter("line-casing", filter);
-    map.setFilter("line-fill", filter);
-  };
-  if (map.getLayer("line-fill")) apply();
-  else map.once("load", apply);
+  for (const [code, { casing, fill }] of lineLayers) {
+    const on = visible.has(code);
+    for (const layer of [casing, fill]) {
+      if (on && !map.hasLayer(layer)) layer.addTo(map);
+      if (!on && map.hasLayer(layer)) map.removeLayer(layer);
+    }
+  }
 
   // An interchange stays while any of its lines is showing.
   for (const { el, station } of markers.values()) {
@@ -159,31 +174,30 @@ export function setVisibleLines(visible) {
 }
 
 export function selectStation(station, { fly = true } = {}) {
-  if (selectedKey) markers.get(selectedKey)?.el.classList.remove("stn-selected");
+  if (selectedKey) {
+    const prev = markers.get(selectedKey);
+    prev?.el.classList.remove("stn-selected");
+    prev?.marker.setZIndexOffset(0);
+  }
   selectedKey = station?.key ?? null;
   if (!station) return;
 
   const entry = markers.get(station.key);
   entry.el.classList.add("stn-selected");
+  entry.marker.setZIndexOffset(1000);
 
   if (fly) {
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    map.easeTo({
-      center: station.lngLat,
-      zoom: Math.max(map.getZoom(), NAMES_FROM_ZOOM),
-      duration: reduce ? 0 : 600,
-      // Keep the station clear of the detail card at the bottom.
-      offset: [0, -60],
-    });
+    const zoom = Math.max(map.getZoom(), NAMES_FROM_ZOOM);
+    // Centre a little below the station, keeping it clear of the detail card.
+    const centre = map.unproject(map.project(toLatLng(station.lngLat), zoom).add([0, 60]), zoom);
+    map.setView(centre, zoom, { animate: !reduceMotion() });
   }
 }
 
 export function zoomBy(delta) {
-  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  map.easeTo({ zoom: map.getZoom() + delta, duration: reduce ? 0 : 200 });
+  map.setZoom(map.getZoom() + delta, { animate: !reduceMotion() });
 }
 
 export function fitNetwork() {
-  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  map.fitBounds(networkBounds, { padding: viewPadding(), duration: reduce ? 0 : 600 });
+  map.fitBounds(networkBounds, { ...fitOptions(), animate: !reduceMotion() });
 }

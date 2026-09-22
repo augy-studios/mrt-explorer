@@ -56,7 +56,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/css/theme.css">
-    <link rel="stylesheet" href="/vendor/maplibre-gl/maplibre-gl.css">
+    <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
     <link rel="stylesheet" href="/css/style.css">
     <meta name="theme-color" content="#ccffcc" />
 
@@ -150,8 +150,8 @@
         </section>
 
         <p class="map-credit">
-            Data: <a href="https://github.com/cheeaun/sgraildata" target="_blank" rel="noopener noreferrer">sgraildata</a>,
-            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>
+            &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>,
+            <a href="https://github.com/cheeaun/sgraildata" target="_blank" rel="noopener noreferrer">sgraildata</a>
         </p>
 
         <p id="mapError" class="map-error glass hidden" role="alert">
@@ -191,7 +191,7 @@
             </div>
             <div class="about">
                 <p>Singapore's MRT and LRT network on one map. Tap a station for its codes and its name in English, Chinese and Tamil, or search by any of them.</p>
-                <p>Once it has loaded, the map works without a connection.</p>
+                <p>Once it has loaded, the lines, stations and search work without a connection. The street map underneath shows offline for the areas you have already viewed.</p>
                 <ul class="about-list">
                     <li>Line paths are simplified and smoothed. They show which stations a line connects, not where the real track runs.</li>
                     <li>This is a reference map. It does not plan journeys or show arrival times.</li>
@@ -199,12 +199,17 @@
                 <p>Station and line data from <a href="https://github.com/cheeaun/sgraildata" target="_blank" rel="noopener noreferrer">sgraildata</a>
                     by Lim Chee Aun, compiled from LTA DataMall, Wikipedia and
                     <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>.
-                    Snapshot of 12 July 2026.</p>
+                    Snapshot of 12 July 2026. Street map tiles from
+                    <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>, drawn with
+                    <a href="https://leafletjs.com" target="_blank" rel="noopener noreferrer">Leaflet</a>.</p>
                 <p class="about-foot">Made with <span class="footer-heart" data-icon="heartFilled" aria-label="love" role="img"></span> by Augy</p>
             </div>
         </div>
     </div>
 
+    <!-- Deferred scripts and modules run in document order, so L exists
+         before app.js does. -->
+    <script defer src="/vendor/leaflet/leaflet.js"></script>
     <script type="module" src="/js/app.js"></script>
 </body>
 

@@ -37,6 +37,29 @@ body {
 .map {
   position: absolute;
   inset: 0;
+  /* Leaflet's panes use z-index 400 to 700. Isolating the map keeps them
+     inside it, under the floating panels. */
+  z-index: 0;
+  isolation: isolate;
+}
+
+/* Leaflet's stylesheet paints the container grey and sets its own font. */
+.map.leaflet-container {
+  background: transparent;
+  font: inherit;
+}
+
+/* Tiles slightly see-through, so the brand tint of the page shows in the
+   street map too and it follows the swatch as well as the mode. */
+.leaflet-tile-pane {
+  opacity: 0.85;
+  transition: filter 0.25s ease;
+}
+
+/* OSM has one tile style. Dark mode inverts it, turning hues back round so
+   water stays blue and parks green, and dims it under the network. */
+:root[data-mode="dark"] .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.85);
 }
 
 /* Floating panels over the map, in the standard 720px column. */
@@ -330,6 +353,16 @@ body {
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 .stn-interchange .stn-dot { border-width: 3px; }
+
+/* Zoomed out, a phone shows the whole network in about 300px. */
+[data-small-dots] .stn-dot {
+  inset: 2px;
+  border-width: 1.5px;
+}
+[data-small-dots] .stn-interchange .stn-dot {
+  inset: 3px;
+  border-width: 2px;
+}
 /* A finger sized target around a 12px dot. */
 .stn-dot::before {
   content: "";
@@ -339,7 +372,8 @@ body {
 }
 .stn-dot:hover { transform: scale(1.25); }
 
-.stn-selected { z-index: 2; }
+/* Raised above its neighbours by setZIndexOffset in js/map.js; Leaflet
+   sets marker z-index inline, so CSS cannot. */
 .stn-selected .stn-dot {
   transform: scale(1.35);
   box-shadow: 0 0 0 3px var(--brand-ink);
