@@ -2,6 +2,32 @@
 <html lang="en">
 
 <head>
+    <meta charset="utf-8">
+    <title>MRT Map Explorer | UwU Apps</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="description" content="Explore Singapore's MRT and LRT network on an interactive map. Station codes and names in English, Chinese and Tamil, and it works offline.">
+
+    <script>
+        (function () {
+            var k = "mrtexplorer";
+            var m = localStorage.getItem(k + ".mode") || "light";
+
+            // Time based mode. Resolved here rather than in theme.js because
+            // theme.js runs after first paint, and an evening reader would
+            // otherwise watch a white page turn dark. Keep the two hours in
+            // step with LIGHT_FROM_HOUR and LIGHT_UNTIL_HOUR in js/theme.js.
+            document.documentElement.setAttribute("data-mode-preference", m);
+            if (m === "time") {
+                var h = new Date().getHours();
+                m = h >= 9 && h < 18 ? "light" : "dark";
+            }
+
+            var c = localStorage.getItem(k + ".colorTheme") || "classic";
+            document.documentElement.setAttribute("data-mode", m);
+            document.documentElement.setAttribute("data-color-theme", c);
+        })();
+    </script>
+
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-FMCYFTFPEL"></script>
     <script>
@@ -18,44 +44,168 @@
         crossorigin="anonymous"></script>
 
     <link rel="manifest" href="/manifest.json" />
-
-    <meta charset="utf-8">
-    <title>MRT Map Explorer | UwU Apps</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="A simple mrtexplorer app; view live mrtexplorer at a glance!">
+    <link rel="canonical" href="https://mrtexplorer.uwuapps.org/" />
 
     <meta property="og:type" content="website">
+    <meta property="og:url" content="https://mrtexplorer.uwuapps.org/" />
     <meta property="og:title" content="MRT Map Explorer | UwU Apps" />
     <meta property="og:site_name" content="UwU Apps" />
-    <meta property="og:description" content="A simple mrtexplorer app; view live mrtexplorer at a glance!" />
+    <meta property="og:description" content="Explore Singapore's MRT and LRT network on an interactive map. Station codes and names in English, Chinese and Tamil, and it works offline." />
 
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Jua">
-    <link rel="stylesheet" href="/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/vendor/maplibre-gl/maplibre-gl.css">
+    <link rel="stylesheet" href="/css/style.css">
     <meta name="theme-color" content="#ccffcc" />
 
     <!-- Embed Image -->
-    <link rel="apple-touch-icon" href="/MME.png">
+    <link rel="apple-touch-icon" href="/MME-192.png">
     <link rel="icon" href="/favicon.ico">
     <link rel="shortcut icon" href="/favicon.ico">
     <meta name="twitter:card" content="summary">
-    <meta name="twitter:image:src" content="/MME.png">
-    <meta property="og:image" content="/MME.png" />
-
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-    <script defer="" src="https://use.fontawesome.com/releases/v6.5.2/js/all.js"></script>
+    <meta name="twitter:image:src" content="https://mrtexplorer.uwuapps.org/MME-512.png">
+    <meta property="og:image" content="https://mrtexplorer.uwuapps.org/MME-512.png" />
 </head>
 
 <body>
-    MRT Map Explorer
+    <div id="app">
+        <div id="map" class="map" role="region" aria-label="Map of the MRT and LRT network"></div>
 
-    <script src="/script.js"></script>
+        <div class="overlay">
+            <header class="topbar glass">
+                <div class="brand">
+                    <img class="brand-icon" src="/MME-192.png" alt="" width="28" height="28">
+                    <h1 class="brand-name">MRT Map Explorer</h1>
+                </div>
+                <div class="topbar-actions">
+                    <button id="aboutBtn" class="icon-btn" type="button" aria-haspopup="dialog" aria-label="About this map">
+                        <span data-icon="info"></span>
+                    </button>
+                    <button id="themeBtn" class="icon-btn" type="button" aria-haspopup="dialog" aria-label="Theme">
+                        <span data-icon="sun"></span>
+                    </button>
+                    <a id="coffeeBtn" class="icon-btn" href="https://donate.stripe.com/28o2akeAr3hv0DK6oo"
+                        target="_blank" rel="noopener noreferrer" aria-label="Buy Augy a Coffee">
+                        <span data-icon="coffee"></span>
+                    </a>
+                </div>
+            </header>
 
-    <script>
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.register('/sw.js');
-        }
-    </script>
-    
+            <section class="controls glass" aria-label="Search and lines">
+                <div class="controls-row">
+                    <div class="search" role="search">
+                        <div class="search-field">
+                            <span class="search-icon" data-icon="search"></span>
+                            <input id="searchInput" type="search" placeholder="Station name or code"
+                                aria-label="Search stations by name in English, Chinese or Tamil, or by station code"
+                                aria-controls="searchResults" aria-expanded="false"
+                                autocomplete="off" spellcheck="false" disabled>
+                            <button id="searchClear" class="icon-btn small hidden" type="button" aria-label="Clear search">
+                                <span data-icon="close"></span>
+                            </button>
+                        </div>
+                        <ul id="searchResults" class="dropdown glass results hidden" aria-label="Matching stations"></ul>
+                        <p id="searchStatus" class="visually-hidden" role="status" aria-live="polite"></p>
+                    </div>
+                    <button id="linesToggle" class="lines-toggle" type="button" aria-expanded="false" aria-controls="linesPanel">
+                        <span data-icon="layers"></span>
+                        <span>Lines</span>
+                        <span id="linesCount" class="lines-count"></span>
+                        <span class="lines-chev" data-icon="chevronDown"></span>
+                    </button>
+                </div>
+                <div id="linesPanel" class="dropdown glass hidden">
+                    <div id="lineList" class="line-list" role="group" aria-label="Show or hide lines"></div>
+                    <button id="showAllLines" class="text-btn" type="button">Show all lines</button>
+                </div>
+            </section>
+        </div>
+
+        <div class="map-controls">
+            <button id="zoomIn" class="icon-btn" type="button" aria-label="Zoom in">
+                <span data-icon="plus"></span>
+            </button>
+            <button id="zoomOut" class="icon-btn" type="button" aria-label="Zoom out">
+                <span data-icon="minus"></span>
+            </button>
+            <button id="fitBtn" class="icon-btn" type="button" aria-label="Show the whole network">
+                <span data-icon="fit"></span>
+            </button>
+        </div>
+
+        <section id="detail" class="detail glass hidden" tabindex="-1" aria-labelledby="detailName">
+            <div class="detail-head">
+                <div class="detail-names">
+                    <h2 id="detailName"></h2>
+                    <p id="detailZh" class="detail-alt" lang="zh-Hans"></p>
+                    <p id="detailTa" class="detail-alt" lang="ta"></p>
+                </div>
+                <button id="detailClose" class="icon-btn small" type="button" aria-label="Close station details">
+                    <span data-icon="close"></span>
+                </button>
+            </div>
+            <ul id="detailLines" class="detail-lines" aria-label="Station codes"></ul>
+        </section>
+
+        <p class="map-credit">
+            Data: <a href="https://github.com/cheeaun/sgraildata" target="_blank" rel="noopener noreferrer">sgraildata</a>,
+            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>
+        </p>
+
+        <p id="mapError" class="map-error glass hidden" role="alert">
+            The network map could not be loaded. Check your connection and reload.
+        </p>
+    </div>
+
+    <!-- Theme picker modal -->
+    <div class="modal-backdrop hidden" id="themeModal">
+        <div class="modal glass" role="dialog" aria-modal="true" aria-labelledby="themeModalTitle">
+            <div class="modal-head">
+                <h2 id="themeModalTitle">Theme</h2>
+                <button class="icon-btn small" type="button" data-close-modal="themeModal" aria-label="Close">
+                    <span data-icon="close"></span>
+                </button>
+            </div>
+            <p class="modal-section-label">Mode</p>
+            <div class="mode-toggle" id="modeToggle">
+                <button class="mode-btn" type="button" data-mode="light" aria-pressed="false"><span data-icon="sun"></span>Light</button>
+                <button class="mode-btn" type="button" data-mode="dark" aria-pressed="false"><span data-icon="moon"></span>Dark</button>
+                <button class="mode-btn mode-btn-wide" type="button" data-mode="time" aria-pressed="false"><span data-icon="clock"></span>Time-based</button>
+            </div>
+            <p class="mode-note" id="modeNote" hidden></p>
+            <p class="modal-section-label">Brand colour</p>
+            <div class="swatch-grid" id="swatchGrid"></div>
+        </div>
+    </div>
+
+    <!-- About modal -->
+    <div class="modal-backdrop hidden" id="aboutModal">
+        <div class="modal glass" role="dialog" aria-modal="true" aria-labelledby="aboutModalTitle">
+            <div class="modal-head">
+                <h2 id="aboutModalTitle">About this map</h2>
+                <button class="icon-btn small" type="button" data-close-modal="aboutModal" aria-label="Close">
+                    <span data-icon="close"></span>
+                </button>
+            </div>
+            <div class="about">
+                <p>Singapore's MRT and LRT network on one map. Tap a station for its codes and its name in English, Chinese and Tamil, or search by any of them.</p>
+                <p>Once it has loaded, the map works without a connection.</p>
+                <ul class="about-list">
+                    <li>Line paths are simplified and smoothed. They show which stations a line connects, not where the real track runs.</li>
+                    <li>This is a reference map. It does not plan journeys or show arrival times.</li>
+                </ul>
+                <p>Station and line data from <a href="https://github.com/cheeaun/sgraildata" target="_blank" rel="noopener noreferrer">sgraildata</a>
+                    by Lim Chee Aun, compiled from LTA DataMall, Wikipedia and
+                    <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>.
+                    Snapshot of 12 July 2026.</p>
+                <p class="about-foot">Made with <span class="footer-heart" data-icon="heartFilled" aria-label="love" role="img"></span> by Augy</p>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="/js/app.js"></script>
 </body>
 
 </html>
